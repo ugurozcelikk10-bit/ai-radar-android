@@ -48,4 +48,3 @@ jobs:
         with:
           name: ai-radar-apk
           path: bin/*.apk
-```0
