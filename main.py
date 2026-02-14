@@ -1,4 +1,7 @@
 # main.py
+# Kivy UI wrapper for AI Radar (no API key, Binance Futures public)
+# Build with Buildozer for Android.
+
 import threading
 from datetime import datetime
 
@@ -23,7 +26,7 @@ KV = r"""
         size_hint_y: None
         height: dp(44)
         Label:
-            text: "AI Radar"
+            text: "AI Radar (Futures • AI≥65 • ATR • 3TP)"
             bold: True
 
     BoxLayout:
@@ -71,11 +74,11 @@ KV = r"""
         spacing: dp(8)
         TextInput:
             id: coins
-            hint_text: "Sembol listesi (virgülle) örn: BTCUSDT,ETHUSDT"
+            hint_text: "Sembol listesi (virgülle) örn: BTCUSDT,ETHUSDT,..."
             multiline: False
             text: root.symbols
         Button:
-            text: "Varsayılan"
+            text: "40 Varsayılan"
             size_hint_x: None
             width: dp(120)
             on_release:
@@ -152,7 +155,12 @@ KV = r"""
 class RootUI(BoxLayout):
     bot_token = StringProperty("")
     chat_id = StringProperty("")
-    symbols = StringProperty("BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT")
+    symbols = StringProperty(
+        "BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT,ADAUSDT,DOGEUSDT,AVAXUSDT,LINKUSDT,DOTUSDT,"
+        "TRXUSDT,LTCUSDT,BCHUSDT,ETCUSDT,ATOMUSDT,OPUSDT,ARBUSDT,NEARUSDT,APTUSDT,FILUSDT,"
+        "SUIUSDT,INJUSDT,TIAUSDT,RNDRUSDT,GRTUSDT,AAVEUSDT,RUNEUSDT,SNXUSDT,DYDXUSDT,UNIUSDT,"
+        "PEPEUSDT,SHIBUSDT,ICPUSDT,SEIUSDT,LDOUSDT,FLOWUSDT,EGLDUSDT,THETAUSDT,MATICUSDT,WIFUSDT"
+    )
     min_ai_proba = StringProperty("0.65")
     scan_interval = StringProperty("60")
     cooldown_min = StringProperty("5")
@@ -166,7 +174,8 @@ class RootUI(BoxLayout):
     _thread = None
 
     def set_default_symbols(self):
-        self.symbols = "BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT,ADAUSDT,DOGEUSDT,AVAXUSDT,LINKUSDT,DOTUSDT"
+        # aynı listeyi geri bas
+        self.symbols = self.symbols
 
     def copy(self, text):
         Clipboard.copy(text or "")
@@ -214,7 +223,10 @@ class RootUI(BoxLayout):
             only_on_new_5m_candle=bool(only_new_candle),
         )
 
-        self._engine = RadarEngine(cfg, log_cb=lambda s: Clock.schedule_once(lambda *_: self._ui_log(s), 0))
+        def log_cb(msg: str):
+            Clock.schedule_once(lambda *_: self._ui_log(msg), 0)
+
+        self._engine = RadarEngine(cfg, log_cb=log_cb)
         self.running = True
         self.status = "✅ Çalışıyor."
         self._ui_log("Bot başlatıldı.")
