@@ -1,4 +1,3 @@
-# main.py
 import threading
 from datetime import datetime
 
@@ -23,8 +22,7 @@ KV = r"""
         size_hint_y: None
         height: dp(44)
         Label:
-            text: "[b]AI Radar v3 (Futures • AI≥65 • ATR • 3TP)[/b]"
-            markup: True
+            text: "AI Radar v3 (Futures • AI≥65 • ATR • 3TP)"
 
     BoxLayout:
         size_hint_y: None
@@ -214,10 +212,7 @@ class RootUI(BoxLayout):
             only_on_new_5m_candle=bool(only_new_candle),
         )
 
-        def safe_log(msg: str):
-            Clock.schedule_once(lambda *_: self._ui_log(msg), 0)
-
-        self._engine = RadarEngine(cfg, log_cb=safe_log)
+        self._engine = RadarEngine(cfg, log_cb=lambda s: Clock.schedule_once(lambda *_: self._ui_log(s), 0))
         self.running = True
         self.status = "✅ Çalışıyor."
         self._ui_log("Bot başlatıldı.")
@@ -234,16 +229,8 @@ class RootUI(BoxLayout):
 
 class AIRadarApp(App):
     def build(self):
-        # KV parse crash olursa en azından exception logu görünsün diye:
-        try:
-            Builder.load_string(KV)
-            return RootUI()
-        except Exception as e:
-            # ekranda hata yazdır
-            root = BoxLayout()
-            from kivy.uix.label import Label
-            root.add_widget(Label(text=f"[b]CRASH:[/b]\n{e}", markup=True))
-            return root
+        Builder.load_string(KV)
+        return RootUI()
 
 if __name__ == "__main__":
     AIRadarApp().run()
