@@ -1,7 +1,4 @@
 # main.py
-# Kivy UI wrapper for AI Radar (no API key, Binance Futures public)
-# Build with Buildozer for Android.
-
 import threading
 from datetime import datetime
 
@@ -26,7 +23,7 @@ KV = r"""
         size_hint_y: None
         height: dp(44)
         Label:
-            text: "AI Radar v3 (Futures • AI≥65 • ATR • 3TP)"
+            text: "AI Radar"
             bold: True
 
     BoxLayout:
@@ -74,11 +71,11 @@ KV = r"""
         spacing: dp(8)
         TextInput:
             id: coins
-            hint_text: "Sembol listesi (virgülle) örn: BTCUSDT,ETHUSDT,..."
+            hint_text: "Sembol listesi (virgülle) örn: BTCUSDT,ETHUSDT"
             multiline: False
             text: root.symbols
         Button:
-            text: "40 Varsayılan"
+            text: "Varsayılan"
             size_hint_x: None
             width: dp(120)
             on_release:
@@ -152,16 +149,10 @@ KV = r"""
             height: max(self.texture_size[1], dp(200))
 """
 
-
 class RootUI(BoxLayout):
     bot_token = StringProperty("")
     chat_id = StringProperty("")
-    symbols = StringProperty(
-        "BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT,ADAUSDT,DOGEUSDT,AVAXUSDT,LINKUSDT,DOTUSDT,"
-        "TRXUSDT,LTCUSDT,BCHUSDT,ETCUSDT,ATOMUSDT,OPUSDT,ARBUSDT,NEARUSDT,APTUSDT,FILUSDT,"
-        "SUIUSDT,INJUSDT,TIAUSDT,RNDRUSDT,GRTUSDT,AAVEUSDT,RUNEUSDT,SNXUSDT,DYDXUSDT,UNIUSDT,"
-        "PEPEUSDT,SHIBUSDT,ICPUSDT,SEIUSDT,LDOUSDT,FLOWUSDT,EGLDUSDT,THETAUSDT,MATICUSDT,WIFUSDT"
-    )
+    symbols = StringProperty("BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT")
     min_ai_proba = StringProperty("0.65")
     scan_interval = StringProperty("60")
     cooldown_min = StringProperty("5")
@@ -175,17 +166,12 @@ class RootUI(BoxLayout):
     _thread = None
 
     def set_default_symbols(self):
-        self.symbols = (
-            "BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT,ADAUSDT,DOGEUSDT,AVAXUSDT,LINKUSDT,DOTUSDT,"
-            "TRXUSDT,LTCUSDT,BCHUSDT,ETCUSDT,ATOMUSDT,OPUSDT,ARBUSDT,NEARUSDT,APTUSDT,FILUSDT,"
-            "SUIUSDT,INJUSDT,TIAUSDT,RNDRUSDT,GRTUSDT,AAVEUSDT,RUNEUSDT,SNXUSDT,DYDXUSDT,UNIUSDT,"
-            "PEPEUSDT,SHIBUSDT,ICPUSDT,SEIUSDT,LDOUSDT,FLOWUSDT,EGLDUSDT,THETAUSDT,MATICUSDT,WIFUSDT"
-        )
+        self.symbols = "BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT,ADAUSDT,DOGEUSDT,AVAXUSDT,LINKUSDT,DOTUSDT"
 
-    def copy(self, text: str):
+    def copy(self, text):
         Clipboard.copy(text or "")
 
-    def paste(self) -> str:
+    def paste(self):
         try:
             return Clipboard.paste() or ""
         except Exception:
@@ -228,11 +214,7 @@ class RootUI(BoxLayout):
             only_on_new_5m_candle=bool(only_new_candle),
         )
 
-        # log callback: thread-safe UI update via Clock
-        def safe_log(msg: str):
-            Clock.schedule_once(lambda *_: self._ui_log(msg), 0)
-
-        self._engine = RadarEngine(cfg, log_cb=safe_log)
+        self._engine = RadarEngine(cfg, log_cb=lambda s: Clock.schedule_once(lambda *_: self._ui_log(s), 0))
         self.running = True
         self.status = "✅ Çalışıyor."
         self._ui_log("Bot başlatıldı.")
@@ -241,20 +223,16 @@ class RootUI(BoxLayout):
         self._thread.start()
 
     def stop(self):
-        try:
-            if self._engine:
-                self._engine.stop()
-        finally:
-            self.running = False
-            self.status = "⏹ Durduruldu."
-            self._ui_log("Bot durduruldu.")
-
+        if self._engine:
+            self._engine.stop()
+        self.running = False
+        self.status = "⏹ Durduruldu."
+        self._ui_log("Bot durduruldu.")
 
 class AIRadarApp(App):
     def build(self):
         Builder.load_string(KV)
         return RootUI()
-
 
 if __name__ == "__main__":
     AIRadarApp().run()
