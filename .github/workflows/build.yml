@@ -8,15 +8,13 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
-      - name: Install system deps
+      - name: Install Linux deps
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -26,31 +24,36 @@ jobs:
             libffi-dev libssl-dev liblzma-dev \
             libsqlite3-dev libjpeg-dev libfreetype6-dev
 
-      - name: Install Android SDK (cmdline-tools) + accept licenses
+      # ---------- ANDROID SDK FULL FIX ----------
+      - name: Install Android SDK (cmdline-tools)
         env:
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
-          sudo mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          sudo mkdir -p $ANDROID_SDK_ROOT
           cd /tmp
 
-          # cmdline-tools (latest)
-          curl -L -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q cmdline-tools.zip
-          sudo rm -rf $ANDROID_SDK_ROOT/cmdline-tools/latest
+          curl -L -o sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q sdk.zip
+
+          sudo rm -rf $ANDROID_SDK_ROOT/cmdline-tools
+          sudo mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
           sudo mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
 
-          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/cmdline-tools/bin" >> $GITHUB_PATH
           echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
 
+      - name: Accept licenses + install packages
+        env:
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        run: |
           yes | sdkmanager --licenses
-
           sdkmanager \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2" \
-            "ndk;25.2.9519653" \
-            "cmake;3.22.1"
+            "ndk;25.2.9519653"
 
+      # ---------- BUILD ----------
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip wheel setuptools
