@@ -2,7 +2,6 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
-  push:
 
 jobs:
   build:
@@ -34,10 +33,10 @@ jobs:
             libncurses5-dev libncursesw5-dev \
             libtinfo6
 
-      - name: Install Buildozer
+      - name: Install Buildozer + pinned Cython (FIX jnius long)
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install buildozer cython
+          python -m pip install "Cython==0.29.36" buildozer
 
       - name: Build APK
         run: |
