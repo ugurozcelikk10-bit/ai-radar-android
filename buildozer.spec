@@ -25,5 +25,5 @@ android.api = 33
 android.ndk = 25b
 android.archs = arm64-v8a
 
-# APK’de python 3.11 var → bunu sabitle
-p4a.python_version = 3.11
+# (isteğe bağlı) python 3.11'e daha yakın dursun:
+# p4a.python_version = 3.11
