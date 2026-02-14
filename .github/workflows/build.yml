@@ -22,9 +22,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # -----------------------------
-      # SYSTEM DEPS
-      # -----------------------------
       - name: Install system deps
         run: |
           sudo apt-get update
@@ -36,61 +33,47 @@ jobs:
             build-essential cmake \
             zlib1g-dev libffi-dev libssl-dev \
             libncurses5-dev libncursesw5-dev \
-            libtinfo6
+            libtinfo6 \
+            curl
 
-      # -----------------------------
-      # BUILD OZER (PINNED)
-      # -----------------------------
-      - name: Install Buildozer
+      - name: Install Android SDK cmdline-tools + accept licenses + install stable packages
+        env:
+          ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
+          set -e
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          cd "$ANDROID_SDK_ROOT/cmdline-tools"
 
-      # -----------------------------
-      # ANDROID SDK (MANUAL + STABLE)
-      # -----------------------------
-      - name: Install Android SDK
-        run: |
-          mkdir -p $HOME/android-sdk/cmdline-tools
-          cd $HOME/android-sdk/cmdline-tools
-          curl -sSLo tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q tools.zip
+          curl -L -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q cmdline-tools.zip
           mv cmdline-tools latest
 
-          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
 
-      # -----------------------------
-      # LICENSE + CORRECT BUILD TOOLS
-      # -----------------------------
-      - name: Accept licenses & install required packages
-        run: |
-          yes | sdkmanager --licenses
+          yes | sdkmanager --licenses || true
 
           sdkmanager \
             "platform-tools" \
             "platforms;android-33" \
-            "build-tools;33.0.2"
+            "build-tools;34.0.0"
 
-      # -----------------------------
-      # CLEAN CACHE (ÖNEMLİ)
-      # -----------------------------
-      - name: Clean build cache
+          sdkmanager --list | head -n 50
+
+      - name: Install Buildozer + pinned Cython
         run: |
-          rm -rf ~/.buildozer
-          rm -rf .buildozer
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
+          buildozer --version
+          python -c "import Cython; print('Cython', Cython.__version__)"
 
-      # -----------------------------
-      # BUILD APK
-      # -----------------------------
       - name: Build APK
+        env:
+          ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
         run: |
           buildozer -v android debug
 
-      # -----------------------------
-      # UPLOAD APK
-      # -----------------------------
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
