@@ -1,9 +1,5 @@
 # main.py
-# Kivy UI wrapper for AI Radar (no API key, Binance Futures public)
-# Build with Buildozer for Android.
-
 import threading
-import time
 from datetime import datetime
 
 from kivy.app import App
@@ -16,6 +12,8 @@ from kivy.uix.boxlayout import BoxLayout
 from ai_radar_core import RadarConfig, RadarEngine
 
 KV = r"""
+#:import dp kivy.metrics.dp
+
 <RootUI>:
     orientation: "vertical"
     padding: dp(12)
@@ -25,8 +23,8 @@ KV = r"""
         size_hint_y: None
         height: dp(44)
         Label:
-            text: "AI Radar v3 (Futures • AI≥65 • ATR • 3TP)"
-            bold: True
+            text: "[b]AI Radar v3 (Futures • AI≥65 • ATR • 3TP)[/b]"
+            markup: True
 
     BoxLayout:
         size_hint_y: None
@@ -168,7 +166,7 @@ class RootUI(BoxLayout):
     _thread = None
 
     def set_default_symbols(self):
-        self.symbols = "BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT,ADAUSDT,DOGEUSDT,AVAXUSDT,LINKUSDT,DOTUSDT,TRXUSDT,LTCUSDT,BCHUSDT,ETCUSDT,ATOMUSDT,OPUSDT,ARBUSDT,NEARUSDT,APTUSDT,FILUSDT,SUIUSDT,INJUSDT,TIAUSDT,RNDRUSDT,GRTUSDT,AAVEUSDT,RUNEUSDT,SNXUSDT,DYDXUSDT,UNIUSDT,PEPEUSDT,SHIBUSDT,ICPUSDT,SEIUSDT,LDOUSDT,FLOWUSDT,EGLDUSDT,THETAUSDT,MATICUSDT,WIFUSDT"
+        self.symbols = self.symbols  # zaten dolu
 
     def copy(self, text):
         Clipboard.copy(text or "")
@@ -181,8 +179,7 @@ class RootUI(BoxLayout):
 
     def _ui_log(self, line: str):
         ts = datetime.now().strftime("%H:%M:%S")
-        self.log_text = f"[{ts}] {line}\n" + self.log_text[:12000]  # keep recent
-        self.ids.status.text = self.status
+        self.log_text = f"[{ts}] {line}\n" + self.log_text[:12000]
 
     def start(self, token, chat_id, symbols_csv, proba, scan_sec, cooldown_min, only_new_candle):
         token = (token or "").strip()
@@ -217,7 +214,10 @@ class RootUI(BoxLayout):
             only_on_new_5m_candle=bool(only_new_candle),
         )
 
-        self._engine = RadarEngine(cfg, log_cb=lambda s: Clock.schedule_once(lambda *_: self._ui_log(s), 0))
+        def safe_log(msg: str):
+            Clock.schedule_once(lambda *_: self._ui_log(msg), 0)
+
+        self._engine = RadarEngine(cfg, log_cb=safe_log)
         self.running = True
         self.status = "✅ Çalışıyor."
         self._ui_log("Bot başlatıldı.")
@@ -234,8 +234,16 @@ class RootUI(BoxLayout):
 
 class AIRadarApp(App):
     def build(self):
-        Builder.load_string(KV)
-        return RootUI()
+        # KV parse crash olursa en azından exception logu görünsün diye:
+        try:
+            Builder.load_string(KV)
+            return RootUI()
+        except Exception as e:
+            # ekranda hata yazdır
+            root = BoxLayout()
+            from kivy.uix.label import Label
+            root.add_widget(Label(text=f"[b]CRASH:[/b]\n{e}", markup=True))
+            return root
 
 if __name__ == "__main__":
     AIRadarApp().run()
