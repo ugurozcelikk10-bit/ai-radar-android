@@ -33,10 +33,16 @@ jobs:
             libncurses5-dev libncursesw5-dev \
             libtinfo6
 
-      - name: Install Buildozer + pinned Cython (FIX jnius long)
+      - name: Install Buildozer + pinned Cython
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "Cython==0.29.36" buildozer
+
+      # 🔥 ANDROID SDK LICENSE + BUILD TOOLS FIX
+      - name: Accept Android licenses + install SDK tools
+        run: |
+          yes | buildozer android accept_sdk_license || true
+          buildozer android update
 
       - name: Build APK
         run: |
