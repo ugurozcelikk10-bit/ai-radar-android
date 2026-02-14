@@ -1,82 +1,39 @@
-name: Build Android APK
-
-on:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Install system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip \
-            python3 python3-pip \
-            openjdk-17-jdk \
-            autoconf automake libtool pkg-config \
-            build-essential cmake \
-            zlib1g-dev libffi-dev libssl-dev \
-            libncurses5-dev libncursesw5-dev \
-            libtinfo6 \
-            curl
-
-      - name: Install Android SDK cmdline-tools + accept licenses + install stable packages
-        env:
-          ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+- name: Install Android SDK + Fix Licenses
         run: |
           set -e
+          ANDROID_SDK_ROOT="$HOME/android-sdk"
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           cd "$ANDROID_SDK_ROOT/cmdline-tools"
 
-          curl -L -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q cmdline-tools.zip
+          curl -L -o tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q tools.zip
           mv cmdline-tools latest
 
+          # DEĞİŞKENLERİ KALICI YAP (Sonraki step'ler için)
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
 
-          yes | sdkmanager --licenses || true
+          # Lisansları kabul et
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses --sdk_root="$ANDROID_SDK_ROOT" || true
 
-          sdkmanager \
+          # Stabil araçları kur (RC yok)
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
             "platform-tools" \
             "platforms;android-33" \
-            "build-tools;34.0.0"
+            "build-tools;33.0.2"
 
-          sdkmanager --list | head -n 50
-
-      - name: Install Buildozer + pinned Cython
+      - name: Clean Buildozer caches (kill RC leftovers)
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
-          buildozer --version
-          python -c "import Cython; print('Cython', Cython.__version__)"
+          rm -rf ~/.buildozer
+          rm -rf .buildozer
 
-      - name: Build APK
-        env:
-          ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+      - name: Build APK (Zorunlu SDK Yolu)
         run: |
-          buildozer -v android debug
+          set -e
+          export ANDROID_SDK_ROOT="$HOME/android-sdk"
+          export ANDROID_HOME="$HOME/android-sdk"
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-radar-apk
-          path: bin/*.apk
-          if-no-files-found: error
+          buildozer -v android debug --sdk-dir "$ANDROID_SDK_ROOT"
