@@ -7,7 +7,6 @@ version = 0.1
 source.dir = .
 source.include_exts = py,kv,png,jpg,jpeg,gif,atlas,txt,json,csv
 source.exclude_exts = spec
-
 entrypoint = main.py
 
 requirements = python3,kivy
@@ -16,20 +15,9 @@ orientation = portrait
 fullscreen = 0
 
 android.permissions = INTERNET,WAKE_LOCK
-
-
-[buildozer]
-log_level = 2
-warn_on_root = 0
-
-
-[android]
 android.api = 33
 android.minapi = 21
-android.ndk = 25b
 android.archs = arm64-v8a
 
-android.sdk_build_tools = 33.0.2
-android.accept_sdk_license = True
-
-p4a.branch = stable
+log_level = 2
+warn_on_root = 0
