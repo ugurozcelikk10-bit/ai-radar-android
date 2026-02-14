@@ -8,8 +8,8 @@ jobs:
     runs-on: ubuntu-22.04
 
     env:
-      ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
-      ANDROID_HOME: ${{ github.workspace }}/android-sdk
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
       - name: Checkout
@@ -31,16 +31,17 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install buildozer cython
 
-      # ANDROID SDK TAM KURULUM (lisans + aidl fix)
+      # ANDROID SDK — HATASIZ KURULUM
       - name: Install Android SDK
         run: |
-          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
-          cd $ANDROID_SDK_ROOT/cmdline-tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
-          unzip -q tools.zip
-          mv cmdline-tools latest
-          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+          sudo mkdir -p /usr/local/lib/android/sdk/cmdline-tools
+          cd /usr/local/lib/android/sdk/cmdline-tools
+          sudo wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
+          sudo unzip -q tools.zip
+          sudo mv cmdline-tools latest
+
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
 
           yes | sdkmanager --licenses
           sdkmanager --update
