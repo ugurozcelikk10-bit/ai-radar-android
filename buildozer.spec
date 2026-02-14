@@ -6,7 +6,6 @@ version = 0.1
 
 source.dir = .
 source.include_exts = py,kv,png,jpg,jpeg,gif,atlas,txt,json,csv
-source.exclude_exts = spec
 entrypoint = main.py
 
 requirements = python3,kivy
@@ -20,6 +19,9 @@ android.minapi = 21
 android.ndk = 25b
 android.archs = arm64-v8a
 
-# (opsiyonel) build hız/çalışma
+# SDK/build-tools'i sabitle (Actions'taki rc/preview saçmalığını keser)
+android.sdk_build_tools = 33.0.2
+android.accept_sdk_license = True
+
 log_level = 2
 warn_on_root = 0
