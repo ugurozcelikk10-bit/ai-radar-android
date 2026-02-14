@@ -8,43 +8,63 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          distribution: temurin
-          java-version: 17
+          python-version: "3.10"
 
-      - name: Install deps
+      - name: Install system deps
         run: |
-          sudo apt update
-          sudo apt install -y zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5
+          sudo apt-get update
+          sudo apt-get install -y \
+            zip unzip git curl openjdk-17-jdk \
+            build-essential autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5 libtinfo5 \
+            libffi-dev libssl-dev liblzma-dev \
+            libsqlite3-dev libjpeg-dev libfreetype6-dev
 
-      - name: Install Python
+      - name: Install Android SDK (cmdline-tools) + accept licenses
+        env:
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
-          python3 -m pip install --upgrade pip
-          pip install buildozer cython virtualenv
+          sudo mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          cd /tmp
 
-      - name: Install Android SDK
-        run: |
-          mkdir -p $HOME/android-sdk/cmdline-tools
-          cd $HOME/android-sdk/cmdline-tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q commandlinetools-linux-11076708_latest.zip
-          mv cmdline-tools latest
+          # cmdline-tools (latest)
+          curl -L -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q cmdline-tools.zip
+          sudo rm -rf $ANDROID_SDK_ROOT/cmdline-tools/latest
+          sudo mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
 
-          export ANDROID_HOME=$HOME/android-sdk
-          export ANDROID_SDK_ROOT=$HOME/android-sdk
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
 
           yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
 
-      - name: Build APK (NO CLEAN)
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "ndk;25.2.9519653" \
+            "cmake;3.22.1"
+
+      - name: Install Buildozer
         run: |
+          python -m pip install --upgrade pip wheel setuptools
+          pip install buildozer cython==0.29.36
+
+      - name: Build APK
+        env:
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        run: |
+          buildozer -v android clean
           buildozer -v android debug
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
           name: ai-radar-apk
           path: bin/*.apk
