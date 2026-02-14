@@ -19,10 +19,9 @@ android.api = 33
 android.minapi = 21
 android.archs = arm64-v8a
 
-# Build-tools ve lisans KİLİTLE (RC 37-rc1'e saplamasın)
-android.sdk_build_tools = 34.0.0
+# RC'ye kaymayı keser
+android.sdk_build_tools = 33.0.2
 android.accept_sdk_license = True
 
-# log
 log_level = 2
 warn_on_root = 0
