@@ -8,63 +8,41 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
-      - name: Install Linux deps
+      - name: Install system deps
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            zip unzip git curl openjdk-17-jdk \
-            build-essential autoconf automake libtool pkg-config \
-            zlib1g-dev libncurses5 libtinfo5 \
-            libffi-dev libssl-dev liblzma-dev \
-            libsqlite3-dev libjpeg-dev libfreetype6-dev
+          sudo apt update
+          sudo apt install -y zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libffi-dev libssl-dev
 
-      # ---------- ANDROID SDK FULL FIX ----------
-      - name: Install Android SDK (cmdline-tools)
-        env:
-          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      # ANDROID SDK FULL AUTO INSTALL
+      - name: Install Android SDK
         run: |
-          sudo mkdir -p $ANDROID_SDK_ROOT
-          cd /tmp
-
-          curl -L -o sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q sdk.zip
-
-          sudo rm -rf $ANDROID_SDK_ROOT/cmdline-tools
-          sudo mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
-          sudo mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
-
-          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/cmdline-tools/bin" >> $GITHUB_PATH
-          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
-
-      - name: Accept licenses + install packages
-        env:
-          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-        run: |
+          export ANDROID_SDK_ROOT=$HOME/android-sdk
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          cd $ANDROID_SDK_ROOT/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-*.zip
+          mv cmdline-tools latest
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
           yes | sdkmanager --licenses
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;33.0.2" \
-            "ndk;25.2.9519653"
+          sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
 
-      # ---------- BUILD ----------
       - name: Install Buildozer
         run: |
-          python -m pip install --upgrade pip wheel setuptools
-          pip install buildozer cython==0.29.36
+          python -m pip install --upgrade pip
+          pip install buildozer cython
 
       - name: Build APK
-        env:
-          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
-          buildozer -v android clean
-          buildozer -v android debug
+          buildozer android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
