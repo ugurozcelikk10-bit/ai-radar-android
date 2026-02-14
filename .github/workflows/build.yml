@@ -20,7 +20,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt update
-          sudo apt install -y zip unzip python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5
+          sudo apt install -y zip unzip python3-pip autoconf libtool pkg-config zlib1g-dev libncurses6
 
       - name: Install Buildozer
         run: |
