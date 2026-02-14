@@ -8,10 +8,9 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -35,10 +34,12 @@ jobs:
             libncurses5-dev libncursesw5-dev \
             libtinfo6
 
-      - name: Install Buildozer + pinned Cython
+      - name: Install Buildozer (pinned)
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
+          buildozer --version
+          python -c "import Cython; print('Cython', Cython.__version__)"
 
       - name: Build APK
         run: |
