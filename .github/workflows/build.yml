@@ -33,7 +33,7 @@ jobs:
             libncurses5-dev libncursesw5-dev \
             libtinfo6
 
-      - name: Install Android SDK
+      - name: Install Android SDK (cmdline-tools) + packages
         run: |
           set -e
           ANDROID_SDK_ROOT="$HOME/android-sdk"
@@ -56,34 +56,46 @@ jobs:
             "build-tools;33.0.2" \
             "platform-tools"
 
-      - name: Install Buildozer
+      - name: Install Buildozer + Cython (pinned)
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
           buildozer --version
 
-      - name: Clean cache
+      - name: Clean build caches
         run: |
           rm -rf .buildozer
           rm -rf ~/.buildozer
 
-      - name: Build APK
+      - name: Build APK (safe)
         run: |
           set -e
-          export ANDROID_SDK_ROOT="$HOME/android-sdk"
-          export ANDROID_HOME="$HOME/android-sdk"
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROID_HOME=$ANDROID_HOME"
 
-          buildozer -v android debug --sdk-dir "$ANDROID_SDK_ROOT"
+          # clean
+          buildozer android clean
 
-          echo "---- BIN ----"
-          ls -lah bin/
+          # build
+          buildozer -v android debug
 
-          APK_PATH=$(ls bin/*.apk | head -n 1)
-          echo "APK FOUND -> $APK_PATH"
+          echo "---- FIND APK ----"
+          mkdir -p bin
+          find . -type f -name "*.apk" -exec cp -f {} bin/ \; || true
+
+          echo "---- BIN LIST ----"
+          ls -lah bin/ || true
+
+          APK_PATH="$(ls -1 bin/*.apk 2>/dev/null | head -n 1 || true)"
+          if [ -z "$APK_PATH" ]; then
+            echo "❌ APK YOK"
+            exit 1
+          fi
+          echo "✅ APK HAZIR -> $APK_PATH"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ai-radar-apk
+          name: ugurcoinsv2-apk
           path: bin/*.apk
+          if-no-files-found: error
