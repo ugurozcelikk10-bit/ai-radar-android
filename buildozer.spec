@@ -1,4 +1,5 @@
 [app]
+
 title = AI Radar
 package.name = airadar
 package.domain = com.ugur
@@ -19,9 +20,12 @@ android.api = 33
 android.minapi = 21
 android.archs = arm64-v8a
 
-# RC'ye kaymayı keser
+# 🔒 RC sürüme kaymayı keser
 android.sdk_build_tools = 33.0.2
+
+# 🔒 Lisans otomatik
 android.accept_sdk_license = True
 
+# Debug
 log_level = 2
 warn_on_root = 0
