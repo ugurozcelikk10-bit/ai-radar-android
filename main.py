@@ -1,14 +1,22 @@
-# AI RADAR ANDROID (TEK DOSYA)
+# ==========================================
+# AI RADAR ANDROID (TEK DOSYA) - FINAL
 # Binance Futures PUBLIC (API key yok)
 # Saf Python: EMA + ATR (pandas yok)
 # Telegram opsiyonel
+# Android crash-proof: SSL fix + thread safe UI log
+# ==========================================
 
+import os
 import time
-import math
 import threading
 from datetime import datetime
 
 import requests
+
+# SSL / CA Fix (Android'de en çok çökerten yer burası)
+import certifi
+os.environ["SSL_CERT_FILE"] = certifi.where()
+os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -33,11 +41,10 @@ def fetch_klines(symbol: str, interval: str, limit: int = 200):
     r.raise_for_status()
     data = r.json()
     # kline format: [openTime, open, high, low, close, volume, ...]
-    o = [float(x[1]) for x in data]
     h = [float(x[2]) for x in data]
     l = [float(x[3]) for x in data]
     c = [float(x[4]) for x in data]
-    return o, h, l, c
+    return h, l, c
 
 # -------------------------
 # Indicators (saf python)
@@ -79,7 +86,7 @@ def tg_send(token, chat_id, msg):
         pass
 
 # -------------------------
-# Strategy (senin PRO_BOT mantığı)
+# Strategy
 # -------------------------
 def classify_setup(price, ema7, ema25, ema45, ema90, ema7_slope, ema45_slope, ema90_slope, atrv):
     try:
@@ -134,7 +141,6 @@ def build_trade_plan(direction, entry_hint, last_low, prev_low, last_high, prev_
     return None
 
 def generate_signal(high, low, close, min_atr_percent=0.0065, rr=2.0, min_risk_percent=0.0015, prox_atr_mult=0.30):
-    # EMA değerleri
     ema7_now  = ema(close, 7)
     ema25_now = ema(close, 25)
     ema45_now = ema(close, 45)
@@ -151,20 +157,17 @@ def generate_signal(high, low, close, min_atr_percent=0.0065, rr=2.0, min_risk_p
     if atr_percent < min_atr_percent:
         return None
 
-    # slope için bir önceki EMA'lar (kaba ama hızlı: son 1 mumu çıkarıp EMA hesapla)
     ema7_prev  = ema(close[:-1], 7)  or ema7_now
     ema25_prev = ema(close[:-1], 25) or ema25_now
     ema45_prev = ema(close[:-1], 45) or ema45_now
     ema90_prev = ema(close[:-1], 90) or ema90_now
 
     ema7_slope  = ema7_now  - ema7_prev
-    ema25_slope = ema25_now - ema25_prev
     ema45_slope = ema45_now - ema45_prev
     ema90_slope = ema90_now - ema90_prev
 
     setup = classify_setup(price, ema7_now, ema25_now, ema45_now, ema90_now, ema7_slope, ema45_slope, ema90_slope, atr_now)
 
-    # EARLY WARNING (senin yaklaşım mantığı)
     near_7_25  = abs(ema7_now - ema25_now) <= (prox_atr_mult * atr_now)
     near_7_45  = abs(ema7_now - ema45_now) <= (prox_atr_mult * atr_now)
     near_25_45 = abs(ema25_now - ema45_now) <= (prox_atr_mult * atr_now)
@@ -211,8 +214,6 @@ def generate_signal(high, low, close, min_atr_percent=0.0065, rr=2.0, min_risk_p
             plan["levels"] = {"price": price, "EMA7": ema7_now, "EMA25": ema25_now, "EMA45": ema45_now, "EMA90": ema90_now}
             return plan
 
-    # NET SIGNAL (senin trend+eğim mantığı)
-    # LONG
     if (price > ema90_now and ema90_slope > 0 and ema45_slope > 0 and ema7_slope > 0 and ema7_now > ema25_now):
         stop = min(last_low, prev_low)
         risk = price - stop
@@ -221,7 +222,6 @@ def generate_signal(high, low, close, min_atr_percent=0.0065, rr=2.0, min_risk_p
         tp = price + (risk * rr)
         return {"type": "SIGNAL", "direction": "LONG", "entry": price, "stop": stop, "tp": tp, "setup": setup}
 
-    # SHORT
     if (price < ema90_now and ema90_slope < 0 and ema45_slope < 0 and ema7_slope < 0 and ema7_now < ema25_now):
         stop = max(last_high, prev_high)
         risk = stop - price
@@ -342,9 +342,12 @@ class RootUI(BoxLayout):
     _stop = None
     _last_alert = {}
 
-    def _log(self, s: str):
+    def _log_ui(self, s: str):
         ts = datetime.now().strftime("%H:%M:%S")
         self.log_text = f"[{ts}] {s}\n" + self.log_text[:14000]
+
+    def _log(self, s: str):
+        Clock.schedule_once(lambda *_: self._log_ui(s), 0)
 
     def start(self):
         if self.running:
@@ -353,7 +356,6 @@ class RootUI(BoxLayout):
         self.status = "Çalışıyor..."
         self._stop = threading.Event()
 
-        # UI'den ayarları al
         self.tf = self.ids.tf.text.strip() or "15m"
         self.min_atr = self.ids.atrp.text.strip() or "0.0065"
         self.scan_sec = self.ids.scanint.text.strip() or "60"
@@ -366,8 +368,11 @@ class RootUI(BoxLayout):
         self._log("Bot başlatıldı.")
 
     def stop(self):
-        if self._stop:
-            self._stop.set()
+        try:
+            if self._stop:
+                self._stop.set()
+        except:
+            pass
         self.running = False
         self.status = "Durduruldu."
         self._log("Bot durduruldu.")
@@ -382,125 +387,135 @@ class RootUI(BoxLayout):
         return False
 
     def _run_loop(self):
+        # Thread içi: asla crash ettirmeyeceğiz
         try:
-            min_atr = float(self.min_atr)
-        except:
-            min_atr = 0.0065
-        try:
-            scan_interval = int(float(self.scan_sec))
-        except:
-            scan_interval = 60
-
-        cooldown_min = 5
-        top_volume_count = 40
-        top_volatile_count = 20
-        rr = 2.0
-
-        while not self._stop.is_set():
             try:
-                # 1) Top volume 40
-                tickers = fetch_24h_tickers()
-                fut = []
-                for t in tickers:
-                    sym = t.get("symbol", "")
-                    if sym.endswith("USDT"):
+                min_atr = float(self.min_atr)
+            except:
+                min_atr = 0.0065
+            try:
+                scan_interval = int(float(self.scan_sec))
+            except:
+                scan_interval = 60
+
+            cooldown_min = 5
+            top_volume_count = 40
+            top_volatile_count = 20
+            rr = 2.0
+
+            self._log("SSL certifi aktif ✅ (Android güvenli)")
+
+            while not self._stop.is_set():
+                try:
+                    self._log("📡 24h tickers çekiliyor...")
+                    tickers = fetch_24h_tickers()
+
+                    fut = []
+                    for t in tickers:
+                        sym = t.get("symbol", "")
+                        if sym.endswith("USDT"):
+                            try:
+                                qv = float(t.get("quoteVolume", "0"))
+                            except:
+                                qv = 0.0
+                            fut.append((sym, qv))
+
+                    fut.sort(key=lambda x: x[1], reverse=True)
+                    top40 = [x[0] for x in fut[:top_volume_count]]
+
+                    self._log("🔎 Volatilite hesaplanıyor...")
+
+                    vols = []
+                    for sym in top40:
+                        if self._stop.is_set():
+                            break
                         try:
-                            qv = float(t.get("quoteVolume", "0"))
+                            h, l, c = fetch_klines(sym, self.tf, limit=60)
+                            a = atr(h, l, c, 14)
+                            if a is None:
+                                continue
+                            vols.append((sym, a / c[-1]))
+                            time.sleep(0.05)
+                        except Exception as e:
+                            # fazla log şişirmeyelim
+                            continue
+
+                    vols.sort(key=lambda x: x[1], reverse=True)
+                    symbols = [x[0] for x in vols[:top_volatile_count]]
+                    self._log(f"🔥 En volatil {top_volatile_count} seçildi: {', '.join(symbols[:8])} ...")
+
+                    # Scan
+                    for sym in symbols:
+                        if self._stop.is_set():
+                            break
+                        try:
+                            h, l, c = fetch_klines(sym, self.tf, limit=220)
+                            res = generate_signal(h, l, c, min_atr_percent=min_atr, rr=rr)
+                            if not res:
+                                continue
+
+                            alert_type = res.get("type", "SIGNAL")
+                            direction = res.get("direction", "?")
+
+                            if not self._can_alert(sym, alert_type, direction, cooldown_min=cooldown_min):
+                                continue
+
+                            setup = (res.get("setup") or "").strip()
+
+                            if alert_type == "EARLY":
+                                lv = res.get("levels", {})
+                                msg = (
+                                    f"{'='*46}\n"
+                                    f"⚠️ EARLY WARNING | {direction} | #{sym}\n"
+                                    f"{setup}\n"
+                                    f"{res.get('note','')}\n"
+                                    f"Price : {lv.get('price',0):.6f}\n"
+                                    f"EMA7  : {lv.get('EMA7',0):.6f}\n"
+                                    f"EMA25 : {lv.get('EMA25',0):.6f}\n"
+                                    f"EMA45 : {lv.get('EMA45',0):.6f}\n"
+                                    f"EMA90 : {lv.get('EMA90',0):.6f}\n"
+                                    f"Entry : {res['entry']:.6f}\n"
+                                    f"Stop  : {res['stop']:.6f}\n"
+                                    f"TP    : {res['tp']:.6f}\n"
+                                    f"{'='*46}"
+                                )
+                            else:
+                                msg = (
+                                    f"{'='*46}\n"
+                                    f"📊 SIGNAL | {direction} | #{sym}\n"
+                                    f"{setup}\n"
+                                    f"Entry : {res['entry']:.6f}\n"
+                                    f"Stop  : {res['stop']:.6f}\n"
+                                    f"TP    : {res['tp']:.6f}\n"
+                                    f"{'='*46}"
+                                )
+
+                            self._log(msg)
+
+                            if self.tg_enabled:
+                                tg_send(self.tg_token, self.tg_chat, msg)
+
+                            time.sleep(0.15)
+
                         except:
-                            qv = 0.0
-                        fut.append((sym, qv))
-                fut.sort(key=lambda x: x[1], reverse=True)
-                top40 = [x[0] for x in fut[:top_volume_count]]
-
-                Clock.schedule_once(lambda *_: self._log("🔎 Volatilite hesaplanıyor..."), 0)
-
-                # 2) Volatile 20 (ATR%)
-                vols = []
-                for sym in top40:
-                    if self._stop.is_set():
-                        break
-                    try:
-                        _, h, l, c = fetch_klines(sym, self.tf, limit=60)
-                        a = atr(h, l, c, 14)
-                        if a is None:
-                            continue
-                        vols.append((sym, a / c[-1]))
-                        time.sleep(0.05)
-                    except:
-                        continue
-
-                vols.sort(key=lambda x: x[1], reverse=True)
-                symbols = [x[0] for x in vols[:top_volatile_count]]
-                Clock.schedule_once(lambda *_: self._log(f"🔥 En volatil {top_volatile_count} seçildi: {', '.join(symbols[:8])}..."), 0)
-
-                # 3) Scan
-                for sym in symbols:
-                    if self._stop.is_set():
-                        break
-                    try:
-                        _, h, l, c = fetch_klines(sym, self.tf, limit=220)
-                        res = generate_signal(h, l, c, min_atr_percent=min_atr, rr=rr)
-                        if not res:
                             continue
 
-                        alert_type = res.get("type", "SIGNAL")
-                        direction = res.get("direction", "?")
+                    self._log(f"✅ Tarama bitti: {datetime.now().strftime('%H:%M')}")
 
-                        if not self._can_alert(sym, alert_type, direction, cooldown_min=cooldown_min):
-                            continue
+                    # scan interval
+                    for _ in range(max(1, scan_interval)):
+                        if self._stop.is_set():
+                            break
+                        time.sleep(1)
 
-                        # message
-                        if alert_type == "EARLY":
-                            lv = res.get("levels", {})
-                            setup = (res.get("setup") or "").strip()
-                            msg = (
-                                f"\n{'='*46}\n"
-                                f"⚠️ EARLY WARNING | {direction} | #{sym}\n"
-                                f"{setup}\n"
-                                f"{res.get('note','')}\n"
-                                f"Price : {lv.get('price',0):.6f}\n"
-                                f"EMA7  : {lv.get('EMA7',0):.6f}\n"
-                                f"EMA25 : {lv.get('EMA25',0):.6f}\n"
-                                f"EMA45 : {lv.get('EMA45',0):.6f}\n"
-                                f"EMA90 : {lv.get('EMA90',0):.6f}\n"
-                                f"Entry : {res['entry']:.6f}\n"
-                                f"Stop  : {res['stop']:.6f}\n"
-                                f"TP    : {res['tp']:.6f}\n"
-                                f"{'='*46}\n"
-                            )
-                        else:
-                            setup = (res.get("setup") or "").strip()
-                            msg = (
-                                f"\n{'='*46}\n"
-                                f"📊 SIGNAL | {direction} | #{sym}\n"
-                                f"{setup}\n"
-                                f"Entry : {res['entry']:.6f}\n"
-                                f"Stop  : {res['stop']:.6f}\n"
-                                f"TP    : {res['tp']:.6f}\n"
-                                f"{'='*46}\n"
-                            )
+                except Exception as e:
+                    self._log(f"Ana döngü hatası: {e}")
+                    time.sleep(5)
 
-                        Clock.schedule_once(lambda *_m=msg: self._log(_m.strip()), 0)
-
-                        if self.tg_enabled:
-                            tg_send(self.tg_token, self.tg_chat, msg)
-
-                        time.sleep(0.15)
-
-                    except Exception:
-                        continue
-
-                Clock.schedule_once(lambda *_: self._log(f"✅ Tarama bitti: {datetime.now().strftime('%H:%M')}"), 0)
-
-                # scan interval
-                for _ in range(max(1, scan_interval)):
-                    if self._stop.is_set():
-                        break
-                    time.sleep(1)
-
-            except Exception as e:
-                Clock.schedule_once(lambda *_: self._log(f"Ana döngü hatası: {e}"), 0)
-                time.sleep(5)
+        except Exception as e:
+            self._log(f"THREAD FATAL: {e}")
+            self.running = False
+            self.status = "Hata!"
 
 class AIRadarApp(App):
     def build(self):
@@ -508,4 +523,4 @@ class AIRadarApp(App):
         return RootUI()
 
 if __name__ == "__main__":
-    AIRadarApp().run()
+    AIRadarApp().run()1
