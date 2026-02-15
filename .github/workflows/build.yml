@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Set up Python 3.10
@@ -22,7 +22,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install system deps
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -36,23 +36,24 @@ jobs:
       - name: Install Android SDK cmdline-tools + packages
         run: |
           set -e
+
           export ANDROID_SDK_ROOT="$HOME/android-sdk"
           export ANDROID_HOME="$HOME/android-sdk"
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
 
           cd "$ANDROID_SDK_ROOT"
+
           curl -sSLo cmdline.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q cmdline.zip
           rm -f cmdline.zip
-          mkdir -p cmdline-tools/latest
-          mv cmdline-tools/* latest/ 2>/dev/null || true
-          mv latest cmdline-tools/latest
+
+          # Google yeni yapıda: cmdline-tools klasörü direkt geliyor
+          mv cmdline-tools cmdline-tools/latest
 
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
 
           yes | sdkmanager --licenses
 
-          # STABLE paketler (RC yok!)
           sdkmanager \
             "platform-tools" \
             "platforms;android-33" \
@@ -76,30 +77,29 @@ jobs:
           export ANDROID_HOME="$HOME/android-sdk"
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
 
-          buildozer android clean || true
-          buildozer -v android debug 2>&1 | tee build_log.txt
-
-          echo "---- BIN ----"
-          ls -lah bin/ || true
+          yes | buildozer -v android debug 2>&1 | tee build_log.txt
 
       - name: Collect APK
         if: always()
         run: |
           mkdir -p output
-          find . -name "*.apk" -exec cp {} output/ \; || true
+          find bin/ -name "*.apk" -exec cp {} output/ \; || true
+          find .buildozer -name "*.apk" -exec cp {} output/ \; || true
+
           echo "---- OUTPUT ----"
           ls -lah output || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: UgurCoins-v3-PRO-APK
+          name: UgurCoins-V3-APK
           path: output/*.apk
           if-no-files-found: error
 
-      - name: Upload build log
+      - name: Upload Build Log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log-v3pro
+          name: build-log-v3
           path: build_log.txt
+          if-no-files-found: warn
