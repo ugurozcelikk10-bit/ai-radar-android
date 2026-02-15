@@ -1,66 +1,62 @@
-[app]
+name: Build Android APK (Ugur Coins v3 AI)
 
-# (str) Uygulama başlığı
-title = Ugur Coins AI
+on:
+  workflow_dispatch:
 
-# (str) Paket adı
-package.name = ugurcoinsv3
+jobs:
+  build:
+    runs-on: ubuntu-22.04
 
-# (str) Paket domaini
-package.domain = com.ugur
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-# (str) Kaynak kodların olduğu dizin
-source.dir = .
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
 
-# (list) Dahil edilecek dosya uzantıları
-source.include_exts = py,kv,png,jpg,jpeg,gif,atlas,txt,json,csv
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-# (str) Giriş dosyası
-entrypoint = main.py
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip curl autoconf automake libtool pkg-config \
+            build-essential cmake zlib1g-dev libffi-dev libssl-dev \
+            libncurses5-dev libncursesw5-dev libtinfo6 libatlas-base-dev \
+            gfortran libsqlite3-dev
 
-# (list) Uygulamanın çalışması için gereken kütüphaneler
-# ÖNEMLİ: requests için openssl, certifi vb. buraya eklenmiştir.
-requirements = python3,kivy,requests,openssl,certifi,urllib3,idna,charset-normalizer
+      - name: Install Buildozer and Cython
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
 
-# (str) Uygulama versiyonu
-version = 0.2
+      - name: Build APK with Buildozer
+        run: |
+          yes | buildozer -v android debug 2>&1 | tee build_log.txt
 
-# (int) Ekran yönü (1=Portrait, 2=Landscape)
-orientation = portrait
+      - name: Collect APK
+        if: always()
+        run: |
+          mkdir -p output
+          # Klasördeki her şeyi tara, en güncel APK'yı bul ve adını v3 yap
+          find bin/ -name "*.apk" -exec cp {} output/UgurCoins-V3-AI.apk \; || true
 
-# (bool) Tam ekran modu
-fullscreen = 0
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: UgurCoins-V3-AI-Pack
+          path: output/*.apk
+          if-no-files-found: error
 
-# (list) Android izinleri
-android.permissions = INTERNET,WAKE_LOCK
+      - name: Upload Build Log
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-v3
+          path: build_log.txt
 
-# (int) Hedef Android API (Android 13 = 33)
-android.api = 33
-
-# (int) Minimum Android API (Lollipop = 21)
-android.minapi = 21
-
-# (str) Android NDK sürümü (Boş bırakırsak buildozer en iyisini seçer)
-android.ndk = 25b
-
-# (bool) SDK lisanslarını otomatik kabul et
-android.accept_sdk_license = True
-
-# (list) Mimari (Modern cihazlar için arm64-v8a yeterlidir)
-android.archs = arm64-v8a
-
-# (str) Paket formatı (Google Play için aab, test için apk)
-android.package_format = apk
-
-# (str) p4a branşı (master en stabil olanıdır)
-p4a.branch = master
-
-# (int) Log seviyesi (2 = Her şeyi göster)
-log_level = 2
-
-# (bool) Root uyarısını kapat
-warn_on_root = 0
-
-[buildozer]
-# (int) Build log seviyesi
-log_level = 2
