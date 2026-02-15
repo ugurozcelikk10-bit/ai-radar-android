@@ -1,8 +1,9 @@
 [app]
-title = AI Radar
-package.name = airadar
+title = Ugur Coins
+
 package.domain = com.ugur
-version = 0.1
+package.name = ugurcoinsv2
+version = 0.2
 
 source.dir = .
 entrypoint = main.py
@@ -20,13 +21,11 @@ android.api = 33
 android.minapi = 21
 android.ndk = 25b
 android.archs = arm64-v8a
+
 android.sdk_build_tools = 33.0.2
 android.accept_sdk_license = True
 
-android.use_androidx = True
-android.enable_androidx = True
-p4a.branch = develop
-
+android.release_artifact = apk
 android.package_format = apk
 
 log_level = 2
