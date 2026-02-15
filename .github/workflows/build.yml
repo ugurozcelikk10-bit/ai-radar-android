@@ -26,15 +26,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git zip unzip curl \
-            openjdk-17-jdk \
+            git zip unzip \
             autoconf automake libtool pkg-config \
             build-essential cmake \
             zlib1g-dev libffi-dev libssl-dev \
             libncurses5-dev libncursesw5-dev \
-            libtinfo6
+            libtinfo6 \
+            curl
 
-      - name: Install Android SDK + Fix Licenses (stable)
+      - name: Install Android SDK + Accept licenses + Install stable packages
         run: |
           set -e
           ANDROID_SDK_ROOT="$HOME/android-sdk"
@@ -43,45 +43,46 @@ jobs:
 
           curl -L -o tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q tools.zip
+          rm -f tools.zip
+          rm -rf latest
           mv cmdline-tools latest
 
-          # Kalıcı ENV/PATH
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
 
-          # Bu step içinde de PATH kullan
-          export ANDROID_HOME="$ANDROID_SDK_ROOT"
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
-
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses --sdk_root="$ANDROID_SDK_ROOT" || true
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses --sdk_root="$ANDROID_SDK_ROOT"
 
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-      - name: Install Buildozer + pinned Cython
+      - name: Install Buildozer (pinned)
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
           buildozer --version
           python -c "import Cython; print('Cython', Cython.__version__)"
 
-      - name: Clean Buildozer caches (kill RC leftovers)
+      - name: Clean Buildozer caches
         run: |
-          rm -rf ~/.buildozer
-          rm -rf .buildozer
+          rm -rf .buildozer || true
+          rm -rf ~/.buildozer || true
 
-      - name: Build APK (force same SDK)
+      - name: Build APK
         run: |
           set -e
           export ANDROID_SDK_ROOT="$HOME/android-sdk"
           export ANDROID_HOME="$HOME/android-sdk"
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
 
-          buildozer -v android debug --sdk-dir "$ANDROID_SDK_ROOT"
+          # APK üretse bile bazen exit 1 basabiliyor -> APK varsa geç, yoksa patlat
+          yes | buildozer -v android debug || true
+
+          ls -lah bin || true
+          test -n "$(ls -1 bin/*.apk 2>/dev/null | head -n 1)" && echo "APK OK" || (echo "APK YOK" && exit 1)
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
