@@ -1,5 +1,3 @@
-# .github/workflows/build.yml  (TAM HALİ - APK GARANTİ)
-
 name: Build Android APK (Ugur Coins v3 PRO)
 
 on:
@@ -10,7 +8,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python 3.10
@@ -24,7 +22,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install System Dependencies
+      - name: Install system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -35,7 +33,33 @@ jobs:
             libncurses5-dev libncursesw5-dev libtinfo6 \
             libsqlite3-dev
 
-      - name: Install Buildozer + Cython (Pinned)
+      - name: Install Android SDK cmdline-tools + packages
+        run: |
+          set -e
+          export ANDROID_SDK_ROOT="$HOME/android-sdk"
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+
+          cd "$ANDROID_SDK_ROOT"
+          curl -sSLo cmdline.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q cmdline.zip
+          rm -f cmdline.zip
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* latest/ 2>/dev/null || true
+          mv latest cmdline-tools/latest
+
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+
+          yes | sdkmanager --licenses
+
+          # STABLE paketler (RC yok!)
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "ndk;25.2.9519653"
+
+      - name: Install Buildozer + Cython (pinned)
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
@@ -45,11 +69,15 @@ jobs:
           rm -rf .buildozer
           rm -rf ~/.buildozer
 
-      - name: Build APK (FINAL)
+      - name: Build APK
         run: |
           set -e
-          yes | buildozer android clean
-          yes | buildozer -v android debug 2>&1 | tee build_log.txt
+          export ANDROID_SDK_ROOT="$HOME/android-sdk"
+          export ANDROID_HOME="$HOME/android-sdk"
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+
+          buildozer android clean || true
+          buildozer -v android debug 2>&1 | tee build_log.txt
 
           echo "---- BIN ----"
           ls -lah bin/ || true
@@ -58,10 +86,9 @@ jobs:
         if: always()
         run: |
           mkdir -p output
-          find bin -name "*.apk" -exec cp {} output/ \; || true
-          find .buildozer -name "*.apk" -exec cp {} output/ \; || true
+          find . -name "*.apk" -exec cp {} output/ \; || true
           echo "---- OUTPUT ----"
-          ls -lah output/ || true
+          ls -lah output || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -70,11 +97,9 @@ jobs:
           path: output/*.apk
           if-no-files-found: error
 
-      - name: Upload Build Log
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log-v3-pro
+          name: build-log-v3pro
           path: build_log.txt
-          if-no-files-found: warn
-```0
