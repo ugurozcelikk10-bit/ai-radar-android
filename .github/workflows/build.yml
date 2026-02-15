@@ -1,4 +1,4 @@
-name: Build Android APK (Ugur Coins v2)
+name: Build Android APK (Ugur Coins V3)
 
 on:
   workflow_dispatch:
@@ -36,30 +36,33 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
 
-      - name: Build APK with Buildozer
+      - name: Clean Build Cache
         run: |
-          # Buildozer'ın SDK/NDK'yı kendi indirmesi için yolları boş bırakıyoruz
-          # Sadece lisansları kabul etmesi için komutu yes ile besliyoruz
+          buildozer android clean || true
+          rm -rf .buildozer
+          rm -rf ~/.buildozer
+
+      - name: Build APK
+        run: |
           yes | buildozer -v android debug 2>&1 | tee build_log.txt
 
       - name: Collect APK
         if: always()
         run: |
           mkdir -p output
-          # APK'yı bul ve 'output' klasörüne taşı
           find bin/ -name "*.apk" -exec cp {} output/ \; || true
-          # Eğer bin içinde yoksa .buildozer içinde ara (garantiye al)
           find .buildozer/android/platform -name "*.apk" -exec cp {} output/ \; || true
+          ls -lah output || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: UgurCoins-V2-APK
+          name: UgurCoins-V3-APK
           path: output/*.apk
           if-no-files-found: warn
 
       - name: Upload Build Log
         uses: actions/upload-artifact@v4
         with:
-          name: build-process-log
+          name: build-log-v3
           path: build_log.txt
