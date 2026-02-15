@@ -8,98 +8,78 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
+      - name: Set Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
-      - name: Set up Java 17
+      - name: Set Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Install System Dependencies
+      - name: Install System Deps
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git zip unzip curl \
-            autoconf automake libtool pkg-config \
-            build-essential cmake \
-            zlib1g-dev libffi-dev libssl-dev \
-            libncurses5-dev libncursesw5-dev libtinfo6 \
-            libsqlite3-dev
+          git zip unzip curl autoconf automake libtool pkg-config \
+          build-essential cmake zlib1g-dev libffi-dev libssl-dev \
+          libncurses5-dev libncursesw5-dev libtinfo6 libsqlite3-dev
 
-      - name: Install Android SDK cmdline-tools + packages
+      # -------- ANDROID SDK (HATASIZ) ----------
+      - name: Install Android SDK
         run: |
           set -e
+          mkdir -p $HOME/android-sdk
+          cd $HOME/android-sdk
 
-          export ANDROID_SDK_ROOT="$HOME/android-sdk"
-          export ANDROID_HOME="$HOME/android-sdk"
-          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
+          unzip -q tools.zip
+          rm tools.zip
 
-          cd "$ANDROID_SDK_ROOT"
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/ || true
 
-          curl -sSLo cmdline.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q cmdline.zip
-          rm -f cmdline.zip
-
-          # Google yeni yapıda: cmdline-tools klasörü direkt geliyor
-          mv cmdline-tools cmdline-tools/latest
-
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
-
-          yes | sdkmanager --licenses
-
-          sdkmanager \
+          yes | cmdline-tools/latest/bin/sdkmanager --licenses
+          cmdline-tools/latest/bin/sdkmanager \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2" \
             "ndk;25.2.9519653"
 
-      - name: Install Buildozer + Cython (pinned)
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
-      - name: Clean build caches
+      # ---------- BUILD ----------
+      - name: Install Buildozer
+        run: |
+          python -m pip install --upgrade pip
+          pip install Cython==0.29.36 buildozer==1.5.0
+
+      - name: Clean
         run: |
           rm -rf .buildozer
-          rm -rf ~/.buildozer
+          rm -rf bin
 
       - name: Build APK
         run: |
-          set -e
-          export ANDROID_SDK_ROOT="$HOME/android-sdk"
-          export ANDROID_HOME="$HOME/android-sdk"
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
-
-          yes | buildozer -v android debug 2>&1 | tee build_log.txt
+          buildozer -v android debug
 
       - name: Collect APK
-        if: always()
         run: |
           mkdir -p output
-          find bin/ -name "*.apk" -exec cp {} output/ \; || true
-          find .buildozer -name "*.apk" -exec cp {} output/ \; || true
-
-          echo "---- OUTPUT ----"
-          ls -lah output || true
+          find . -name "*.apk" -exec cp {} output/ \; || true
+          ls -R output || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: UgurCoins-V3-APK
           path: output/*.apk
-          if-no-files-found: error
-
-      - name: Upload Build Log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-v3
-          path: build_log.txt
           if-no-files-found: warn
