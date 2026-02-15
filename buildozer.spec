@@ -1,62 +1,37 @@
-name: Build Android APK (Ugur Coins v3 AI)
+[app]
 
-on:
-  workflow_dispatch:
+title = Ugur Coins V3
 
-jobs:
-  build:
-    runs-on: ubuntu-22.04
+package.name = ugurcoinsv3
+package.domain = com.ugur
 
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+source.dir = .
+source.include_exts = py,kv,png,jpg,jpeg,gif,atlas,txt,json,csv
+entrypoint = main.py
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
+requirements = python3,kivy,requests,openssl,certifi,urllib3,idna,charset-normalizer
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+version = 0.3
 
-      - name: Install System Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip curl autoconf automake libtool pkg-config \
-            build-essential cmake zlib1g-dev libffi-dev libssl-dev \
-            libncurses5-dev libncursesw5-dev libtinfo6 libatlas-base-dev \
-            gfortran libsqlite3-dev
+orientation = portrait
+fullscreen = 0
 
-      - name: Install Buildozer and Cython
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
+android.permissions = INTERNET,WAKE_LOCK
 
-      - name: Build APK with Buildozer
-        run: |
-          yes | buildozer -v android debug 2>&1 | tee build_log.txt
+android.api = 33
+android.minapi = 21
+android.ndk = 25b
+android.accept_sdk_license = True
+android.archs = arm64-v8a
 
-      - name: Collect APK
-        if: always()
-        run: |
-          mkdir -p output
-          # Klasördeki her şeyi tara, en güncel APK'yı bul ve adını v3 yap
-          find bin/ -name "*.apk" -exec cp {} output/UgurCoins-V3-AI.apk \; || true
+android.package_format = apk
+android.release_artifact = apk
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: UgurCoins-V3-AI-Pack
-          path: output/*.apk
-          if-no-files-found: error
+p4a.branch = master
 
-      - name: Upload Build Log
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-v3
-          path: build_log.txt
+log_level = 2
+warn_on_root = 0
 
+
+[buildozer]
+log_level = 2
