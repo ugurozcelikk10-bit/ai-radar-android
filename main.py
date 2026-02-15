@@ -3,6 +3,10 @@ from kivy.uix.label import Label
 
 class AppTest(App):
     def build(self):
-        return Label(text="AI Radar OK")
+        return Label(
+            text="AI RADAR TEST OK ✅",
+            font_size="32sp"
+        )
 
-AppTest().run()
+if __name__ == "__main__":
+    AppTest().run()
