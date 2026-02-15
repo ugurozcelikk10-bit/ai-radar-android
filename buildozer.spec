@@ -1,10 +1,10 @@
 [app]
 
 # (str) Uygulama başlığı
-title = Ugur Coins
+title = Ugur Coins AI
 
 # (str) Paket adı
-package.name = ugurcoinsv2
+package.name = ugurcoinsv3
 
 # (str) Paket domaini
 package.domain = com.ugur
