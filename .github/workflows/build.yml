@@ -1,4 +1,6 @@
-name: Build Android APK (Ugur Coins v3)
+# .github/workflows/build.yml  (TAM HALİ - APK GARANTİ)
+
+name: Build Android APK (Ugur Coins v3 PRO)
 
 on:
   workflow_dispatch:
@@ -8,7 +10,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Set up Python 3.10
@@ -22,7 +24,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install system deps
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -30,51 +32,49 @@ jobs:
             autoconf automake libtool pkg-config \
             build-essential cmake \
             zlib1g-dev libffi-dev libssl-dev \
-            libncurses5-dev libncursesw5-dev \
-            libtinfo6
+            libncurses5-dev libncursesw5-dev libtinfo6 \
+            libsqlite3-dev
 
-      - name: Install Buildozer + pinned Cython
+      - name: Install Buildozer + Cython (Pinned)
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
-          buildozer --version
-          python -c "import Cython; print('Cython', Cython.__version__)"
 
-      - name: Clean cache
+      - name: Clean build caches
         run: |
           rm -rf .buildozer
           rm -rf ~/.buildozer
-          mkdir -p bin
 
-      - name: Build APK (zırhlı)
+      - name: Build APK (FINAL)
         run: |
           set -e
-          buildozer android clean || true
-          buildozer -v android debug 2>&1 | tee build_log.txt
-
-          # APK'yı nerede üretirse üretsin bin/ içine zorla kopyala
-          find . -name "*.apk" -exec cp -f {} bin/ \; || true
+          yes | buildozer android clean
+          yes | buildozer -v android debug 2>&1 | tee build_log.txt
 
           echo "---- BIN ----"
           ls -lah bin/ || true
 
-          APK_PATH=$(ls -1 bin/*.apk 2>/dev/null | head -n 1 || true)
-          if [ -z "$APK_PATH" ]; then
-            echo "❌ APK bulunamadı."
-            exit 1
-          fi
-          echo "✅ APK HAZIR -> $APK_PATH"
+      - name: Collect APK
+        if: always()
+        run: |
+          mkdir -p output
+          find bin -name "*.apk" -exec cp {} output/ \; || true
+          find .buildozer -name "*.apk" -exec cp {} output/ \; || true
+          echo "---- OUTPUT ----"
+          ls -lah output/ || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: UgurCoins-v3-APK
-          path: bin/*.apk
+          name: UgurCoins-v3-PRO-APK
+          path: output/*.apk
           if-no-files-found: error
 
       - name: Upload Build Log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: UgurCoins-v3-build-log
+          name: build-log-v3-pro
           path: build_log.txt
           if-no-files-found: warn
+```0
