@@ -52,41 +52,43 @@ jobs:
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses --sdk_root="$ANDROID_SDK_ROOT"
 
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
+            "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2" \
-            "platform-tools"
+            "ndk;25.2.9519653"
 
       - name: Install Buildozer + Cython (pinned)
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
           buildozer --version
+          python -c "import Cython; print('Cython', Cython.__version__)"
 
-      - name: Clean build caches
+      - name: Clean build caches (SAFE)
         run: |
           rm -rf .buildozer
           rm -rf ~/.buildozer
+          rm -rf ~/.gradle/caches
+          rm -rf ~/.gradle/wrapper
 
-      - name: Build APK (safe)
+      - name: Build APK (final)
         run: |
           set -e
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "ANDROID_HOME=$ANDROID_HOME"
+          export ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
+          export ANDROID_HOME="$ANDROID_HOME"
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
 
-          # clean
-          buildozer android clean
+          echo "== START BUILD =="
+          buildozer -v android debug 2>&1 | tee build_log.txt
 
-          # build
-          buildozer -v android debug
-
-          echo "---- FIND APK ----"
+          echo "== COLLECT APK =="
           mkdir -p bin
           find . -type f -name "*.apk" -exec cp -f {} bin/ \; || true
 
-          echo "---- BIN LIST ----"
+          echo "== BIN LIST =="
           ls -lah bin/ || true
 
-          APK_PATH="$(ls -1 bin/*.apk 2>/dev/null | head -n 1 || true)"
+          APK_PATH=$(ls -1 bin/*.apk 2>/dev/null | head -n 1 || true)
           if [ -z "$APK_PATH" ]; then
             echo "❌ APK YOK"
             exit 1
@@ -96,6 +98,13 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ugurcoinsv2-apk
+          name: ai-radar-apk
           path: bin/*.apk
           if-no-files-found: error
+
+      - name: Upload build log
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build_log.txt
+          if-no-files-found: warn
