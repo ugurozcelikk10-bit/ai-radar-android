@@ -1,9 +1,9 @@
 # ==========================================
-# AI RADAR ANDROID (TEK DOSYA) - FINAL
+# AI RADAR ANDROID (TEK DOSYA) - PRO FINAL
 # Binance Futures PUBLIC (API key yok)
 # Saf Python: EMA + ATR (pandas yok)
 # Telegram opsiyonel
-# Android crash-proof: SSL fix + thread safe UI log
+# Android-safe: SSL cert fix + thread-safe UI log
 # ==========================================
 
 import os
@@ -12,9 +12,9 @@ import threading
 from datetime import datetime
 
 import requests
-
-# SSL / CA Fix (Android'de en çok çökerten yer burası)
 import certifi
+
+# SSL / CA Fix (Android'de en çok patlatan yer)
 os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
@@ -40,7 +40,6 @@ def fetch_klines(symbol: str, interval: str, limit: int = 200):
     r = requests.get(f"{BASE}/fapi/v1/klines", params=params, timeout=15)
     r.raise_for_status()
     data = r.json()
-    # kline format: [openTime, open, high, low, close, volume, ...]
     h = [float(x[2]) for x in data]
     l = [float(x[3]) for x in data]
     c = [float(x[4]) for x in data]
@@ -86,7 +85,7 @@ def tg_send(token, chat_id, msg):
         pass
 
 # -------------------------
-# Strategy
+# Strategy (PRO)
 # -------------------------
 def classify_setup(price, ema7, ema25, ema45, ema90, ema7_slope, ema45_slope, ema90_slope, atrv):
     try:
@@ -117,7 +116,7 @@ def classify_setup(price, ema7, ema25, ema45, ema90, ema7_slope, ema45_slope, em
             return "❌ FAKE BREAK (SHORT tuzağı)"
     except:
         pass
-    return None
+    return ""
 
 def build_trade_plan(direction, entry_hint, last_low, prev_low, last_high, prev_high, atrv, rr=2.0):
     if direction == "LONG":
@@ -232,9 +231,10 @@ def generate_signal(high, low, close, min_atr_percent=0.0065, rr=2.0, min_risk_p
 
     return None
 
-# -------------------------
-# Kivy UI
-# -------------------------
+
+# ===============================
+# KIVY UI
+# ===============================
 KV = r"""
 <RootUI>:
     orientation: "vertical"
@@ -242,7 +242,7 @@ KV = r"""
     spacing: dp(10)
 
     Label:
-        text: "AI RADAR (Futures Public • EMA/ATR • High Prob)"
+        text: "AI RADAR (Futures • EMA/ATR • High Prob)"
         bold: True
         size_hint_y: None
         height: dp(36)
@@ -322,7 +322,7 @@ KV = r"""
             valign: "top"
             text_size: self.width, None
             size_hint_y: None
-            height: max(self.texture_size[1], dp(400))
+            height: max(self.texture_size[1], dp(520))
 """
 
 class RootUI(BoxLayout):
@@ -365,7 +365,7 @@ class RootUI(BoxLayout):
 
         self._t = threading.Thread(target=self._run_loop, daemon=True)
         self._t.start()
-        self._log("Bot başlatıldı.")
+        self._log("Bot başlatıldı ✅")
 
     def stop(self):
         try:
@@ -387,7 +387,6 @@ class RootUI(BoxLayout):
         return False
 
     def _run_loop(self):
-        # Thread içi: asla crash ettirmeyeceğiz
         try:
             try:
                 min_atr = float(self.min_atr)
@@ -399,11 +398,14 @@ class RootUI(BoxLayout):
                 scan_interval = 60
 
             cooldown_min = 5
-            top_volume_count = 40
-            top_volatile_count = 20
             rr = 2.0
 
-            self._log("SSL certifi aktif ✅ (Android güvenli)")
+            # “Az tarıyor” diyen yer burası:
+            top_volume_count = 40     # 24h volume top
+            top_volatile_count = 20   # ATR% top
+            # İstersen sonra: 60 / 35 yaparız
+
+            self._log("SSL certifi aktif ✅")
 
             while not self._stop.is_set():
                 try:
@@ -421,28 +423,27 @@ class RootUI(BoxLayout):
                             fut.append((sym, qv))
 
                     fut.sort(key=lambda x: x[1], reverse=True)
-                    top40 = [x[0] for x in fut[:top_volume_count]]
+                    top_symbols = [x[0] for x in fut[:top_volume_count]]
 
-                    self._log("🔎 Volatilite hesaplanıyor...")
+                    self._log("🔎 Volatilite (ATR%) hesaplanıyor...")
 
                     vols = []
-                    for sym in top40:
+                    for sym in top_symbols:
                         if self._stop.is_set():
                             break
                         try:
-                            h, l, c = fetch_klines(sym, self.tf, limit=60)
+                            h, l, c = fetch_klines(sym, self.tf, limit=80)
                             a = atr(h, l, c, 14)
                             if a is None:
                                 continue
                             vols.append((sym, a / c[-1]))
                             time.sleep(0.05)
-                        except Exception as e:
-                            # fazla log şişirmeyelim
+                        except:
                             continue
 
                     vols.sort(key=lambda x: x[1], reverse=True)
                     symbols = [x[0] for x in vols[:top_volatile_count]]
-                    self._log(f"🔥 En volatil {top_volatile_count} seçildi: {', '.join(symbols[:8])} ...")
+                    self._log(f"🔥 Seçilenler: {', '.join(symbols[:10])} ...")
 
                     # Scan
                     for sym in symbols:
@@ -502,7 +503,6 @@ class RootUI(BoxLayout):
 
                     self._log(f"✅ Tarama bitti: {datetime.now().strftime('%H:%M')}")
 
-                    # scan interval
                     for _ in range(max(1, scan_interval)):
                         if self._stop.is_set():
                             break
@@ -523,4 +523,4 @@ class AIRadarApp(App):
         return RootUI()
 
 if __name__ == "__main__":
-    AIRadarApp().run()1
+    AIRadarApp().run()
