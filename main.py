@@ -1,9 +1,10 @@
 # ==========================================
-# AI RADAR ANDROID (TEK DOSYA) - PRO FINAL
-# Binance Futures PUBLIC (API key yok)
-# Saf Python: EMA + ATR (pandas yok)
+# UGUR COINS (V2) - CLEAN FAST
+# Binance USDT-M Futures tarar (PUBLIC)
+# Sadece OKX SWAP'ta listeli coinleri yazar
+# ATR girişi TAM SAYI: 65 => %0.65
+# SL: ATR tabanlı, TP: 3 kademe
 # Telegram opsiyonel
-# Android-safe: SSL cert fix + thread-safe UI log
 # ==========================================
 
 import os
@@ -14,7 +15,7 @@ from datetime import datetime
 import requests
 import certifi
 
-# SSL / CA Fix (Android'de en çok patlatan yer)
+# Android SSL fix
 os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
@@ -28,16 +29,16 @@ from kivy.uix.boxlayout import BoxLayout
 # -------------------------
 # Binance Futures endpoints
 # -------------------------
-BASE = "https://fapi.binance.com"
+BINANCE_BASE = "https://fapi.binance.com"
 
 def fetch_24h_tickers():
-    r = requests.get(f"{BASE}/fapi/v1/ticker/24hr", timeout=15)
+    r = requests.get(f"{BINANCE_BASE}/fapi/v1/ticker/24hr", timeout=15)
     r.raise_for_status()
     return r.json()
 
 def fetch_klines(symbol: str, interval: str, limit: int = 200):
     params = {"symbol": symbol, "interval": interval, "limit": limit}
-    r = requests.get(f"{BASE}/fapi/v1/klines", params=params, timeout=15)
+    r = requests.get(f"{BINANCE_BASE}/fapi/v1/klines", params=params, timeout=15)
     r.raise_for_status()
     data = r.json()
     h = [float(x[2]) for x in data]
@@ -46,7 +47,30 @@ def fetch_klines(symbol: str, interval: str, limit: int = 200):
     return h, l, c
 
 # -------------------------
-# Indicators (saf python)
+# OKX SWAP instruments (Public)
+# -------------------------
+OKX_BASE = "https://www.okx.com"
+
+def binance_to_okx_swap(symbol: str) -> str:
+    s = (symbol or "").strip().upper()
+    if not s.endswith("USDT"):
+        return ""
+    base = s[:-4]
+    return f"{base}-USDT-SWAP"
+
+def okx_fetch_swap_instruments_set():
+    r = requests.get(
+        f"{OKX_BASE}/api/v5/public/instruments",
+        params={"instType": "SWAP"},
+        timeout=20,
+    )
+    r.raise_for_status()
+    j = r.json()
+    data = j.get("data", [])
+    return set(x.get("instId", "") for x in data if x.get("instId"))
+
+# -------------------------
+# Indicators (pure python)
 # -------------------------
 def ema(series, length):
     if len(series) < length:
@@ -73,7 +97,7 @@ def atr(high, low, close, length=14):
     return sum(trs[-length:]) / length
 
 # -------------------------
-# Telegram (opsiyonel)
+# Telegram (optional)
 # -------------------------
 def tg_send(token, chat_id, msg):
     if not token or not chat_id:
@@ -85,156 +109,61 @@ def tg_send(token, chat_id, msg):
         pass
 
 # -------------------------
-# Strategy (PRO)
+# Pattern + Risk (clean/fast)
 # -------------------------
-def classify_setup(price, ema7, ema25, ema45, ema90, ema7_slope, ema45_slope, ema90_slope, atrv):
-    try:
-        spread = max(ema7, ema25, ema45, ema90) - min(ema7, ema25, ema45, ema90)
-        if spread <= (0.35 * atrv):
-            return "🧨 EXPLOSION SETUP"
+def detect_regime(price, ema45, ema90):
+    if ema45 is None or ema90 is None:
+        return "UNKNOWN"
+    if ema45 > ema90 and price >= ema90:
+        return "UP"
+    if ema45 < ema90 and price <= ema90:
+        return "DOWN"
+    return "CHOP"
 
-        if (ema45 > ema90) and (price >= ema25):
-            if (ema7 > ema25) and (ema7_slope > 0) and (ema45_slope > 0) and (ema90_slope > 0):
-                return "🔥 HIGH PROB LONG"
-            if (ema7 > ema25) and (ema7_slope <= 0):
-                return "⚠️ WEAK LONG"
+def detect_pattern(ema7, ema25, ema45, ema90, atrv):
+    if None in (ema7, ema25, ema45, ema90) or atrv is None:
+        return "UNKNOWN"
+    spread = max(ema7, ema25, ema45, ema90) - min(ema7, ema25, ema45, ema90)
+    if spread <= 0.25 * atrv:
+        return "SQUEEZE"
+    if spread <= 0.35 * atrv:
+        return "EXPLOSION"
+    return "TREND"
 
-        if (ema45 < ema90) and (price <= ema25):
-            if (ema7 < ema25) and (ema7_slope < 0) and (ema45_slope < 0) and (ema90_slope < 0):
-                return "🔥 HIGH PROB SHORT"
-            if (ema7 < ema25) and (ema7_slope >= 0):
-                return "⚠️ WEAK SHORT"
-
-        if (abs(ema7 - ema25) <= (0.25 * atrv)) and (
-            (ema7_slope < 0 and ema7 > ema25) or (ema7_slope > 0 and ema7 < ema25)
-        ):
-            return "🧊 TREND COOLING"
-
-        if (ema7 > ema25) and (ema45 < ema90):
-            return "❌ FAKE BREAK (LONG tuzağı)"
-        if (ema7 < ema25) and (ema45 > ema90):
-            return "❌ FAKE BREAK (SHORT tuzağı)"
-    except:
-        pass
-    return ""
-
-def build_trade_plan(direction, entry_hint, last_low, prev_low, last_high, prev_high, atrv, rr=2.0):
+def build_levels(entry, atrv, direction):
+    risk = 1.2 * atrv
     if direction == "LONG":
-        stop = min(last_low, prev_low) - (0.20 * atrv)
-        entry = entry_hint
-        risk = entry - stop
-        if risk <= 0:
-            return None
-        tp = entry + (risk * rr)
-        return {"direction": "LONG", "entry": entry, "stop": stop, "tp": tp}
+        sl = entry - risk
+        tp1 = entry + risk * 1.0
+        tp2 = entry + risk * 1.6
+        tp3 = entry + risk * 2.3
+    else:
+        sl = entry + risk
+        tp1 = entry - risk * 1.0
+        tp2 = entry - risk * 1.6
+        tp3 = entry - risk * 2.3
+    return sl, tp1, tp2, tp3
 
-    if direction == "SHORT":
-        stop = max(last_high, prev_high) + (0.20 * atrv)
-        entry = entry_hint
-        risk = stop - entry
-        if risk <= 0:
-            return None
-        tp = entry - (risk * rr)
-        return {"direction": "SHORT", "entry": entry, "stop": stop, "tp": tp}
+def base_probability(pattern, regime, direction, atrp):
+    p = 0.50
+    if pattern == "SQUEEZE":   p += 0.06
+    if pattern == "EXPLOSION": p += 0.08
+    if pattern == "TREND":     p += 0.04
 
-    return None
+    if regime == "UP" and direction == "LONG":     p += 0.08
+    if regime == "DOWN" and direction == "SHORT":  p += 0.08
+    if regime == "CHOP":                            p -= 0.06
 
-def generate_signal(high, low, close, min_atr_percent=0.0065, rr=2.0, min_risk_percent=0.0015, prox_atr_mult=0.30):
-    ema7_now  = ema(close, 7)
-    ema25_now = ema(close, 25)
-    ema45_now = ema(close, 45)
-    ema90_now = ema(close, 90)
-    if None in (ema7_now, ema25_now, ema45_now, ema90_now):
-        return None
+    if atrp < 0.0065: p -= 0.05
+    elif atrp > 0.012: p += 0.03
 
-    atr_now = atr(high, low, close, 14)
-    if atr_now is None:
-        return None
+    if p < 0.05: p = 0.05
+    if p > 0.95: p = 0.95
+    return p
 
-    price = close[-1]
-    atr_percent = atr_now / price
-    if atr_percent < min_atr_percent:
-        return None
-
-    ema7_prev  = ema(close[:-1], 7)  or ema7_now
-    ema25_prev = ema(close[:-1], 25) or ema25_now
-    ema45_prev = ema(close[:-1], 45) or ema45_now
-    ema90_prev = ema(close[:-1], 90) or ema90_now
-
-    ema7_slope  = ema7_now  - ema7_prev
-    ema45_slope = ema45_now - ema45_prev
-    ema90_slope = ema90_now - ema90_prev
-
-    setup = classify_setup(price, ema7_now, ema25_now, ema45_now, ema90_now, ema7_slope, ema45_slope, ema90_slope, atr_now)
-
-    near_7_25  = abs(ema7_now - ema25_now) <= (prox_atr_mult * atr_now)
-    near_7_45  = abs(ema7_now - ema45_now) <= (prox_atr_mult * atr_now)
-    near_25_45 = abs(ema25_now - ema45_now) <= (prox_atr_mult * atr_now)
-    near_45_90 = abs(ema45_now - ema90_now) <= (prox_atr_mult * atr_now)
-
-    bend_down_to_25 = (ema7_now > ema25_now) and (ema7_slope < 0) and near_7_25
-    bend_up_to_25   = (ema7_now < ema25_now) and (ema7_slope > 0) and near_7_25
-    squeeze_to_45   = near_7_45 and near_25_45
-
-    prev_gap_45_90 = abs(ema45_prev - ema90_prev)
-    gap_45_90 = abs(ema45_now - ema90_now)
-    closing_45_90 = gap_45_90 < prev_gap_45_90
-    approaching_45_90 = near_45_90 and closing_45_90
-
-    long_early = (
-        ema90_slope > 0 and ema45_slope > 0 and
-        (bend_down_to_25 or (near_7_25 and ema7_slope >= 0)) and
-        (squeeze_to_45 or approaching_45_90)
-    )
-    short_early = (
-        ema90_slope < 0 and ema45_slope < 0 and
-        (bend_up_to_25 or (near_7_25 and ema7_slope <= 0)) and
-        (squeeze_to_45 or approaching_45_90)
-    )
-
-    last_low, prev_low = low[-1], low[-2]
-    last_high, prev_high = high[-1], high[-2]
-
-    if long_early:
-        plan = build_trade_plan("LONG", ema25_now, last_low, prev_low, last_high, prev_high, atr_now, rr)
-        if plan:
-            plan["type"] = "EARLY"
-            plan["note"] = "EMA'lar sıkışıyor / kesişime yaklaşıyor (LONG adayı)."
-            plan["setup"] = setup
-            plan["levels"] = {"price": price, "EMA7": ema7_now, "EMA25": ema25_now, "EMA45": ema45_now, "EMA90": ema90_now}
-            return plan
-
-    if short_early:
-        plan = build_trade_plan("SHORT", ema25_now, last_low, prev_low, last_high, prev_high, atr_now, rr)
-        if plan:
-            plan["type"] = "EARLY"
-            plan["note"] = "EMA'lar sıkışıyor / kesişime yaklaşıyor (SHORT adayı)."
-            plan["setup"] = setup
-            plan["levels"] = {"price": price, "EMA7": ema7_now, "EMA25": ema25_now, "EMA45": ema45_now, "EMA90": ema90_now}
-            return plan
-
-    if (price > ema90_now and ema90_slope > 0 and ema45_slope > 0 and ema7_slope > 0 and ema7_now > ema25_now):
-        stop = min(last_low, prev_low)
-        risk = price - stop
-        if risk <= 0 or (risk / price) < min_risk_percent:
-            return None
-        tp = price + (risk * rr)
-        return {"type": "SIGNAL", "direction": "LONG", "entry": price, "stop": stop, "tp": tp, "setup": setup}
-
-    if (price < ema90_now and ema90_slope < 0 and ema45_slope < 0 and ema7_slope < 0 and ema7_now < ema25_now):
-        stop = max(last_high, prev_high)
-        risk = stop - price
-        if risk <= 0 or (risk / price) < min_risk_percent:
-            return None
-        tp = price - (risk * rr)
-        return {"type": "SIGNAL", "direction": "SHORT", "entry": price, "stop": stop, "tp": tp, "setup": setup}
-
-    return None
-
-
-# ===============================
-# KIVY UI
-# ===============================
+# -------------------------
+# Kivy UI
+# -------------------------
 KV = r"""
 <RootUI>:
     orientation: "vertical"
@@ -242,7 +171,7 @@ KV = r"""
     spacing: dp(10)
 
     Label:
-        text: "AI RADAR (Futures • EMA/ATR • High Prob)"
+        text: "Ugur Coins (V2) • Binance tarar • OKX SWAP yazar"
         bold: True
         size_hint_y: None
         height: dp(36)
@@ -256,17 +185,24 @@ KV = r"""
         spacing: dp(8)
 
         Label:
-            text: "Timeframe"
+            text: "TF (5m/15m/1h)"
         TextInput:
             id: tf
             text: root.tf
             multiline: False
 
         Label:
-            text: "Min ATR % (0.0065=0.65%)"
+            text: "Min ATR (tam sayı) 65=%0.65"
         TextInput:
-            id: atrp
-            text: root.min_atr
+            id: atrint
+            text: root.min_atr_int
+            multiline: False
+
+        Label:
+            text: "Min AI % (65= %65)"
+        TextInput:
+            id: minaiint
+            text: root.min_ai_int
             multiline: False
 
         Label:
@@ -322,12 +258,13 @@ KV = r"""
             valign: "top"
             text_size: self.width, None
             size_hint_y: None
-            height: max(self.texture_size[1], dp(520))
+            height: max(self.texture_size[1], dp(420))
 """
 
 class RootUI(BoxLayout):
     tf = StringProperty("15m")
-    min_atr = StringProperty("0.0065")
+    min_atr_int = StringProperty("65")   # 65 => 0.0065
+    min_ai_int = StringProperty("65")    # 65 => 0.65
     scan_sec = StringProperty("60")
 
     tg_token = StringProperty("")
@@ -342,29 +279,58 @@ class RootUI(BoxLayout):
     _stop = None
     _last_alert = {}
 
+    _okx_swap_set = None
+    _okx_swap_ts = 0
+
     def _log_ui(self, s: str):
         ts = datetime.now().strftime("%H:%M:%S")
-        self.log_text = f"[{ts}] {s}\n" + self.log_text[:14000]
+        self.log_text = f"[{ts}] {s}\n" + self.log_text[:16000]
 
     def _log(self, s: str):
         Clock.schedule_once(lambda *_: self._log_ui(s), 0)
 
+    def _okx_refresh_if_needed(self):
+        now = time.time()
+        if (self._okx_swap_set is None) or (now - self._okx_swap_ts > 3600):
+            self._log("🧾 OKX SWAP listesi çekiliyor...")
+            try:
+                s = okx_fetch_swap_instruments_set()
+                self._okx_swap_set = s if s else set()
+            except:
+                self._okx_swap_set = set()
+            self._okx_swap_ts = now
+            self._log(f"✅ OKX SWAP sayısı: {len(self._okx_swap_set)}")
+
+    def _can_alert(self, symbol, direction, cooldown_min=5):
+        key = (symbol, direction)
+        now = time.time()
+        last = self._last_alert.get(key, 0)
+        if (now - last) >= cooldown_min * 60:
+            self._last_alert[key] = now
+            return True
+        return False
+
     def start(self):
         if self.running:
             return
-        self.running = True
-        self.status = "Çalışıyor..."
-        self._stop = threading.Event()
 
         self.tf = self.ids.tf.text.strip() or "15m"
-        self.min_atr = self.ids.atrp.text.strip() or "0.0065"
-        self.scan_sec = self.ids.scanint.text.strip() or "60"
+        self.min_atr_int = (self.ids.atrint.text.strip() or "65")
+        self.min_ai_int = (self.ids.minaiint.text.strip() or "65")
+        self.scan_sec = (self.ids.scanint.text.strip() or "60")
+
         self.tg_token = self.ids.tkn.text.strip()
         self.tg_chat = self.ids.cid.text.strip()
         self.tg_enabled = bool(self.ids.tgen.active)
 
+        self.running = True
+        self.status = "Çalışıyor..."
+        self._stop = threading.Event()
+
         self._t = threading.Thread(target=self._run_loop, daemon=True)
         self._t.start()
+
+        self._log("SSL certifi aktif ✅")
         self._log("Bot başlatıldı ✅")
 
     def stop(self):
@@ -377,41 +343,40 @@ class RootUI(BoxLayout):
         self.status = "Durduruldu."
         self._log("Bot durduruldu.")
 
-    def _can_alert(self, symbol, alert_type, direction, cooldown_min=5):
-        key = (symbol, alert_type, direction)
-        now = time.time()
-        last = self._last_alert.get(key, 0)
-        if (now - last) >= cooldown_min * 60:
-            self._last_alert[key] = now
-            return True
-        return False
-
     def _run_loop(self):
         try:
+            # ATR: integer => percent/10000
             try:
-                min_atr = float(self.min_atr)
+                atr_int = int(float(self.min_atr_int))
             except:
-                min_atr = 0.0065
+                atr_int = 65
+            min_atr = max(1, atr_int) / 10000.0
+
+            # AI: integer => /100
+            try:
+                ai_int = int(float(self.min_ai_int))
+            except:
+                ai_int = 65
+            min_ai = max(1, ai_int) / 100.0
+
             try:
                 scan_interval = int(float(self.scan_sec))
             except:
                 scan_interval = 60
 
             cooldown_min = 5
-            rr = 2.0
-
-            # “Az tarıyor” diyen yer burası:
-            top_volume_count = 40     # 24h volume top
-            top_volatile_count = 20   # ATR% top
-            # İstersen sonra: 60 / 35 yaparız
-
-            self._log("SSL certifi aktif ✅")
+            top_volume_count = 40
+            top_volatile_count = 20
 
             while not self._stop.is_set():
                 try:
-                    self._log("📡 24h tickers çekiliyor...")
+                    self._okx_refresh_if_needed()
+                    okx_swap_set = self._okx_swap_set or set()
+
+                    self._log("📡 Binance 24h tickers...")
                     tickers = fetch_24h_tickers()
 
+                    # Top 40 volume
                     fut = []
                     for t in tickers:
                         sym = t.get("symbol", "")
@@ -421,78 +386,102 @@ class RootUI(BoxLayout):
                             except:
                                 qv = 0.0
                             fut.append((sym, qv))
-
                     fut.sort(key=lambda x: x[1], reverse=True)
-                    top_symbols = [x[0] for x in fut[:top_volume_count]]
+                    top40 = [x[0] for x in fut[:top_volume_count]]
 
-                    self._log("🔎 Volatilite (ATR%) hesaplanıyor...")
-
+                    # Volatility pick (OKX filtered)
                     vols = []
-                    for sym in top_symbols:
+                    for sym in top40:
                         if self._stop.is_set():
                             break
+                        okx_inst = binance_to_okx_swap(sym)
+                        if not okx_inst or (okx_inst not in okx_swap_set):
+                            continue
                         try:
-                            h, l, c = fetch_klines(sym, self.tf, limit=80)
+                            h, l, c = fetch_klines(sym, self.tf, limit=120)
                             a = atr(h, l, c, 14)
                             if a is None:
                                 continue
-                            vols.append((sym, a / c[-1]))
+                            atrp = a / c[-1]
+                            vols.append((sym, atrp))
                             time.sleep(0.05)
                         except:
                             continue
 
                     vols.sort(key=lambda x: x[1], reverse=True)
                     symbols = [x[0] for x in vols[:top_volatile_count]]
-                    self._log(f"🔥 Seçilenler: {', '.join(symbols[:10])} ...")
+
+                    okx_list = [binance_to_okx_swap(s) for s in symbols]
+                    self._log("✅ Seçilenler (OKX SWAP): " + ", ".join(okx_list[:10]) + (" ..." if len(okx_list) > 10 else ""))
 
                     # Scan
                     for sym in symbols:
                         if self._stop.is_set():
                             break
+
+                        okx_inst = binance_to_okx_swap(sym)
+                        if not okx_inst:
+                            continue
+
                         try:
-                            h, l, c = fetch_klines(sym, self.tf, limit=220)
-                            res = generate_signal(h, l, c, min_atr_percent=min_atr, rr=rr)
-                            if not res:
+                            h, l, c = fetch_klines(sym, self.tf, limit=240)
+                            a = atr(h, l, c, 14)
+                            if a is None:
+                                continue
+                            price = c[-1]
+                            atrp = a / price
+                            if atrp < min_atr:
                                 continue
 
-                            alert_type = res.get("type", "SIGNAL")
-                            direction = res.get("direction", "?")
-
-                            if not self._can_alert(sym, alert_type, direction, cooldown_min=cooldown_min):
+                            e7 = ema(c, 7)
+                            e25 = ema(c, 25)
+                            e45 = ema(c, 45)
+                            e90 = ema(c, 90)
+                            if None in (e7, e25, e45, e90):
                                 continue
 
-                            setup = (res.get("setup") or "").strip()
+                            regime = detect_regime(price, e45, e90)
+                            pattern = detect_pattern(e7, e25, e45, e90, a)
 
-                            if alert_type == "EARLY":
-                                lv = res.get("levels", {})
-                                msg = (
-                                    f"{'='*46}\n"
-                                    f"⚠️ EARLY WARNING | {direction} | #{sym}\n"
-                                    f"{setup}\n"
-                                    f"{res.get('note','')}\n"
-                                    f"Price : {lv.get('price',0):.6f}\n"
-                                    f"EMA7  : {lv.get('EMA7',0):.6f}\n"
-                                    f"EMA25 : {lv.get('EMA25',0):.6f}\n"
-                                    f"EMA45 : {lv.get('EMA45',0):.6f}\n"
-                                    f"EMA90 : {lv.get('EMA90',0):.6f}\n"
-                                    f"Entry : {res['entry']:.6f}\n"
-                                    f"Stop  : {res['stop']:.6f}\n"
-                                    f"TP    : {res['tp']:.6f}\n"
-                                    f"{'='*46}"
-                                )
+                            # direction
+                            if regime == "UP":
+                                direction = "LONG"
+                            elif regime == "DOWN":
+                                direction = "SHORT"
                             else:
-                                msg = (
-                                    f"{'='*46}\n"
-                                    f"📊 SIGNAL | {direction} | #{sym}\n"
-                                    f"{setup}\n"
-                                    f"Entry : {res['entry']:.6f}\n"
-                                    f"Stop  : {res['stop']:.6f}\n"
-                                    f"TP    : {res['tp']:.6f}\n"
-                                    f"{'='*46}"
-                                )
+                                if pattern in ("SQUEEZE", "EXPLOSION"):
+                                    direction = "LONG" if e7 > e25 else "SHORT"
+                                else:
+                                    continue
+
+                            if not self._can_alert(sym, direction, cooldown_min=cooldown_min):
+                                continue
+
+                            # base AI prob (clean/fast)
+                            prob = base_probability(pattern, regime, direction, atrp)
+                            if prob < min_ai:
+                                continue
+
+                            entry = e25
+                            sl, tp1, tp2, tp3 = build_levels(entry, a, direction)
+
+                            msg = (
+                                f"━━━━━━━━━━\n"
+                                f"📡 COIN: {okx_inst}\n"
+                                f"🧠 Yön: {direction}\n"
+                                f"🎯 Olasılık: %{int(prob*100)}\n"
+                                f"🧩 Pattern: {pattern}\n"
+                                f"🌊 Rejim: {regime}\n"
+                                f"📍 Entry: {entry:.6f}\n"
+                                f"🛑 SL: {sl:.6f}\n"
+                                f"🎯 TP1: {tp1:.6f}\n"
+                                f"🎯 TP2: {tp2:.6f}\n"
+                                f"🎯 TP3: {tp3:.6f}\n"
+                                f"⚡ ATR%: {atrp*100:.2f}\n"
+                                f"━━━━━━━━━━"
+                            )
 
                             self._log(msg)
-
                             if self.tg_enabled:
                                 tg_send(self.tg_token, self.tg_chat, msg)
 
@@ -502,7 +491,6 @@ class RootUI(BoxLayout):
                             continue
 
                     self._log(f"✅ Tarama bitti: {datetime.now().strftime('%H:%M')}")
-
                     for _ in range(max(1, scan_interval)):
                         if self._stop.is_set():
                             break
@@ -517,10 +505,10 @@ class RootUI(BoxLayout):
             self.running = False
             self.status = "Hata!"
 
-class AIRadarApp(App):
+class UgurCoinsApp(App):
     def build(self):
         Builder.load_string(KV)
         return RootUI()
 
 if __name__ == "__main__":
-    AIRadarApp().run()
+    UgurCoinsApp().run()
