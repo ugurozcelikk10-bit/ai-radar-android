@@ -33,7 +33,7 @@ jobs:
             libncurses5-dev libncursesw5-dev \
             libtinfo6
 
-      - name: Install Android SDK + accept licenses + install stable packages
+      - name: Install Android SDK
         run: |
           set -e
           ANDROID_SDK_ROOT="$HOME/android-sdk"
@@ -56,26 +56,25 @@ jobs:
             "build-tools;33.0.2" \
             "platform-tools"
 
-      - name: Install Buildozer (PINNED) + Cython (PINNED)
+      - name: Install Buildozer + Cython
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "Cython==0.29.36" "buildozer==1.5.0"
-          buildozer --version
-          python -c "import Cython; print('Cython', Cython.__version__)"
 
-      - name: Clean Buildozer cache
+      - name: Clean build cache
         run: |
           rm -rf .buildozer
           rm -rf ~/.buildozer
 
-      - name: Build APK
+      - name: Build APK (FULL LOG)
         run: |
           set -e
           export ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
           export ANDROID_HOME="$ANDROID_HOME"
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
 
-          buildozer -v android debug --sdk-dir "$ANDROID_SDK_ROOT"
+          buildozer -v android clean || true
+          buildozer -v android debug --sdk-dir "$ANDROID_SDK_ROOT" 2>&1 | tee build_log.txt
 
           echo "---- BIN ----"
           ls -lah bin/ || true
@@ -83,13 +82,18 @@ jobs:
           APK_PATH=$(ls -1 bin/*.apk 2>/dev/null | head -n 1 || true)
           if [ -z "$APK_PATH" ]; then
             echo "❌ APK YOK"
+            echo "---- LAST 200 LINES ----"
+            tail -n 200 build_log.txt || true
             exit 1
           fi
+
           echo "✅ APK HAZIR -> $APK_PATH"
 
-      - name: Upload APK
+      - name: Upload APK + LOG
         uses: actions/upload-artifact@v4
         with:
-          name: ai-radar-apk
-          path: bin/*.apk
+          name: ai-radar-build
+          path: |
+            bin/*.apk
+            build_log.txt
           if-no-files-found: error
