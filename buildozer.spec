@@ -1,19 +1,18 @@
 [app]
-title = Ugur Coins v3 PRO
-package.name = ugurcoinsv3pro
+
+title = UGUR COINS v3 PRO
+package.name = ugurcoinsv3
 package.domain = com.ugur
 
 source.dir = .
-source.include_exts = py,kv,png,jpg,jpeg,gif,atlas,txt,json,csv
+source.include_exts = py,kv,png,jpg,jpeg,gif,atlas,txt,json
 
-entrypoint = main.py
-
-requirements = python3,kivy,requests,openssl,certifi,urllib3,idna,charset-normalizer
-
-version = 0.3
+version = 3.0
 
 orientation = portrait
 fullscreen = 0
+
+requirements = python3,kivy,requests,certifi,urllib3,idna,charset-normalizer,openssl
 
 android.permissions = INTERNET,WAKE_LOCK
 
@@ -25,14 +24,15 @@ android.accept_sdk_license = True
 
 android.archs = arm64-v8a
 
-# SADECE APK (AAB yok!)
+# SADECE APK üret (AAB yok)
+android.release_artifact = apk
 android.package_format = apk
 
-# stabil
 p4a.branch = master
 
 log_level = 2
 warn_on_root = 0
+
 
 [buildozer]
 log_level = 2
